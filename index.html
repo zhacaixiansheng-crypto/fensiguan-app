@@ -2,93 +2,70 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>三维空间垂距计算器 PWA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>垂距计算 Pro</title>
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#007bff">
-    <link rel="apple-touch-icon" href="icon-192.png">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; line-height: 1.5; color: #333; }
-        .container { max-width: 800px; margin: 0 auto; }
-        h1 { color: #007bff; font-size: 24px; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
-        h2 { font-size: 18px; margin-top: 25px; }
-        .card { background: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 20px; border: 1px solid #dee2e6; }
-        .point-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
-        label { display: block; width: 100%; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
-        input, select, textarea { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; width: 100%; box-sizing: border-box; }
-        input[type="number"] { flex: 1; min-width: 80px; }
-        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
-        button { padding: 12px 20px; font-size: 16px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; flex: 1; min-width: 120px; }
-        button:hover { background-color: #0056b3; }
-        button.secondary { background-color: #6c757d; }
-        #result { margin-top: 20px; padding: 15px; border-radius: 8px; background: #e7f3ff; font-weight: bold; border-left: 5px solid #007bff; }
-        #history-list { list-style: none; padding: 0; }
-        #history-list li { margin-bottom: 10px; padding: 10px; background: #fff; border: 1px solid #eee; border-radius: 5px; font-size: 14px; }
-        .status { font-size: 12px; color: #666; margin-top: 5px; }
+        :root { --primary: #007bff; --bg: #f4f7f6; }
+        body { 
+            font-family: -apple-system, system-ui, sans-serif; 
+            margin: 0; padding: 20px; background: var(--bg);
+            /* 禁止下拉刷新和回弹 */
+            overscroll-behavior-y: contain;
+            user-select: none; /* 防止意外选中文本 */
+            -webkit-tap-highlight-color: transparent;
+        }
+        .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        h1 { font-size: 20px; color: var(--primary); margin: 0 0 16px 0; text-align: center; }
+        textarea, select, input { 
+            width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; 
+            font-size: 16px; box-sizing: border-box; margin-top: 8px; user-select: text; 
+        }
+        .coords-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
+        button { 
+            width: 100%; padding: 14px; background: var(--primary); color: white; 
+            border: none; border-radius: 8px; font-size: 16px; font-weight: bold; margin-top: 12px;
+        }
+        button.sec { background: #6c757d; margin-top: 8px; }
+        #result { background: #e7f3ff; padding: 12px; border-radius: 8px; margin-top: 12px; display: none; border-left: 4px solid var(--primary); }
+        .history-item { font-size: 13px; border-bottom: 1px solid #eee; padding: 8px 0; }
+        .history-item b { color: var(--primary); }
     </style>
 </head>
 <body>
-<div class="container">
+
+<div class="card">
     <h1>三维空间垂距计算器</h1>
+    <select id="groupSelect" onchange="fillPoints()"><option value="">请选择内置线路数据</option></select>
+    <textarea id="dataInput" rows="2" placeholder="也可在此粘贴新数据(编号,x1,y1,z1...)"></textarea>
+    <button class="sec" onclick="loadGroups()">导入/更新数据</button>
+</div>
 
-    <div class="card">
-        <h2>步骤1: 数据管理</h2>
-        <p style="font-size: 12px;">默认已加载内置线路数据。您也可以粘贴新数据覆盖或上传CSV。</p>
-        <textarea id="dataInput" placeholder="编号,X1,Y1,Z1,X2,Y2,Z2,X3,Y3,Z3"></textarea>
-        <div class="status" id="importStatus">准备就绪</div>
-        <div class="btn-group" style="margin-top:10px;">
-            <input type="file" id="fileInput" accept=".csv" style="display:none">
-            <button type="button" class="secondary" onclick="document.getElementById('fileInput').click()">上传文件</button>
-            <button type="button" onclick="loadGroups()">解析并导入</button>
-        </div>
+<div class="card">
+    <div id="pointsDisplay">
+        <div class="coords-grid"><input id="ax" readonly placeholder="Ax"><input id="ay" readonly placeholder="Ay"><input id="az" readonly placeholder="Az"></div>
+        <div class="coords-grid"><input id="bx" readonly placeholder="Bx"><input id="by" readonly placeholder="By"><input id="bz" readonly placeholder="Bz"></div>
+        <div class="coords-grid"><input id="cx" readonly placeholder="Cx"><input id="cy" readonly placeholder="Cy"><input id="cz" readonly placeholder="Cz"></div>
     </div>
-
-    <form id="planeForm">
-        <div class="card">
-            <h2>步骤2: 选择组并输入点</h2>
-            <label>选择组编号：</label>
-            <select id="groupSelect" onchange="fillPoints()">
-                <option value="">--请选择内置或导入的数据--</option>
-            </select>
-            
-            <div id="planePointsDisplay" style="margin-top:15px; font-size: 13px; color: #555;">
-                <div class="point-group">
-                    <label>平面点 A / B / C (自动):</label>
-                    <input type="number" id="ax" readonly placeholder="Ax"> <input type="number" id="ay" readonly placeholder="Ay"> <input type="number" id="az" readonly placeholder="Az">
-                </div>
-                <div class="point-group">
-                    <input type="number" id="bx" readonly placeholder="Bx"> <input type="number" id="by" readonly placeholder="By"> <input type="number" id="bz" readonly placeholder="Bz">
-                </div>
-                <div class="point-group">
-                    <input type="number" id="cx" readonly placeholder="Cx"> <input type="number" id="cy" readonly placeholder="Cy"> <input type="number" id="cz" readonly placeholder="Cz">
-                </div>
-            </div>
-
-            <div class="point-group" style="margin-top:10px; background: #fff; padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
-                <label>待查点 P (请输入坐标):</label>
-                <input type="number" id="px" step="any" placeholder="Px" required> 
-                <input type="number" id="py" step="any" placeholder="Py" required> 
-                <input type="number" id="pz" step="any" placeholder="Pz" required>
-            </div>
-            <button type="button" onclick="calculateDistance()" style="width: 100%; margin-top: 15px;">立即计算垂距</button>
-        </div>
-    </form>
-
-    <div id="result" style="display:none;"></div>
-
-    <div class="card">
-        <h2>历史记录</h2>
-        <div class="btn-group">
-            <button type="button" class="secondary" onclick="showHistory()">查看/刷新记录</button>
-            <button type="button" class="secondary" onclick="exportHistory()">导出 CSV</button>
-        </div>
-        <ul id="history-list"></ul>
+    <div class="coords-grid" style="margin-top:20px; background:#fff3e0; padding:10px; border-radius:8px;">
+        <input type="number" id="px" step="any" placeholder="Px"><input type="number" id="py" step="any" placeholder="Py"><input type="number" id="pz" step="any" placeholder="Pz">
     </div>
+    <button onclick="calculate()">开始计算</button>
+    <div id="result"></div>
+</div>
+
+<div class="card">
+    <div style="display:flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size:16px; margin:0;">历史记录</h2>
+        <a href="javascript:clearHistory()" style="font-size:12px; color:red;">清空</a>
+    </div>
+    <div id="historyList"></div>
+    <button class="sec" onclick="exportCSV()">导出 CSV 记录</button>
 </div>
 
 <script>
-    // 内置数据
-    const builtInData = `线左A2,3328539.6601,488991.3529,-1.2231,3328554.2504,489015.6863,20.1565,3328555.9570,489018.5330,22.3814
+    // 1. 数据初始化 (由于数据量大，建议保持原始格式解析)
+    const rawData = `线左A2,3328539.6601,488991.3529,-1.2231,3328554.2504,489015.6863,20.1565,3328555.9570,489018.5330,22.3814
 线左A4,3328539.7012,488991.4215,-3.1663,3328554.7415,489016.5052,18.8732,3328556.3746,489019.2295,21.1346
 线左A6,3328539.7012,488991.4215,-5.1697,3328555.2354,489017.3291,17.5933,3328556.8366,489020.0001,19.9411
 线左A8,3328539.7012,488991.4215,-7.1731,3328555.7317,489018.1568,16.3171,3328557.2993,489020.7716,18.7482
@@ -160,121 +137,96 @@
 线右D'9,3328504.4220,489013.4819,-8.2559,3328526.7048,489036.9384,15.7050,3328528.7701,489039.0687,18.0838`;
 
     let groups = new Map();
-    let history = [];
+    let history = JSON.parse(localStorage.getItem('my_geo_history') || '[]');
 
-    // 初始化：加载内置数据并注册 Service Worker
     window.onload = () => {
-        parseData(builtInData);
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').catch(err => console.log("SW注册失败", err));
-        }
+        parse(rawData);
+        renderHistory();
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
     };
 
-    function loadGroups() {
-        const textarea = document.getElementById('dataInput');
-        const fileInput = document.getElementById('fileInput');
-        
-        if (textarea.value.trim()) {
-            parseData(textarea.value);
-            textarea.value = '';
-        } else if (fileInput.files.length > 0) {
-            const reader = new FileReader();
-            reader.onload = (e) => parseData(e.target.result);
-            reader.readAsText(fileInput.files[0]);
-        } else {
-            alert('请在框内输入数据或选择文件！');
-        }
-    }
-
-    function parseData(text) {
-        const lines = text.trim().split('\n');
-        let count = 0;
+    function parse(text) {
         const select = document.getElementById('groupSelect');
-        
-        lines.forEach(line => {
-            const parts = line.split(',').map(p => p.trim());
-            if (parts.length === 10) {
-                const id = parts[0];
-                const coords = parts.slice(1).map(Number);
-                if (!isNaN(coords[0])) {
-                    groups.set(id, coords);
-                    const option = document.createElement('option');
-                    option.value = id;
-                    option.text = id;
-                    select.appendChild(option);
-                    count++;
-                }
+        text.trim().split('\n').forEach(line => {
+            const p = line.split(',');
+            if(p.length === 10) {
+                const id = p[0];
+                groups.set(id, p.slice(1).map(Number));
+                const opt = new Option(id, id);
+                select.add(opt);
             }
         });
-        document.getElementById('importStatus').innerText = `成功导入/更新：${count} 组数据。`;
+    }
+
+    function loadGroups() {
+        const input = document.getElementById('dataInput').value;
+        if(input) { parse(input); alert('导入成功'); }
     }
 
     function fillPoints() {
         const id = document.getElementById('groupSelect').value;
-        if (!id) return;
+        if(!id) return;
         const c = groups.get(id);
-        const fields = ['ax','ay','az','bx','by','bz','cx','cy','cz'];
-        fields.forEach((id, idx) => document.getElementById(id).value = c[idx]);
+        const ids = ['ax','ay','az','bx','by','bz','cx','cy','cz'];
+        ids.forEach((key, i) => document.getElementById(key).value = c[i]);
     }
 
-    function calculateDistance() {
-        const getVal = id => parseFloat(document.getElementById(id).value);
-        const ax = getVal('ax'), ay = getVal('ay'), az = getVal('az');
-        const bx = getVal('bx'), by = getVal('by'), bz = getVal('bz');
-        const cx = getVal('cx'), cy = getVal('cy'), cz = getVal('cz');
-        const px = getVal('px'), py = getVal('py'), pz = getVal('pz');
-        const groupId = document.getElementById('groupSelect').value;
+    function calculate() {
+        const getV = i => parseFloat(document.getElementById(i).value);
+        const ax=getV('ax'), ay=getV('ay'), az=getV('az');
+        const bx=getV('bx'), by=getV('by'), bz=getV('bz');
+        const cx=getV('cx'), cy=getV('cy'), cz=getV('cz');
+        const px=getV('px'), py=getV('py'), pz=getV('pz');
 
-        if (isNaN(ax) || isNaN(px)) {
-            alert('请选择数据组并输入查询点坐标！');
-            return;
-        }
+        if(isNaN(px)) return alert('请输入P点坐标');
 
-        const abx = bx - ax, aby = by - ay, abz = bz - az;
-        const acx = cx - ax, acy = cy - ay, acz = cz - az;
-        const A = aby * acz - abz * acy;
-        const B = abz * acx - abx * acz;
-        const C = abx * acy - aby * acx;
+        // 向量叉乘算平面的 A, B, C, D
+        const v1x = bx-ax, v1y = by-ay, v1z = bz-az;
+        const v2x = cx-ax, v2y = cy-ay, v2z = cz-az;
+        const A = v1y*v2z - v1z*v2y;
+        const B = v1z*v2x - v1x*v2z;
+        const C = v1x*v2y - v1y*v2x;
         const norm = Math.sqrt(A*A + B*B + C*C);
+        
+        if(norm === 0) return alert('三点共线错误');
+        
+        const D = -(A*ax + B*ay + C*az);
+        const dist = Math.abs(A*px + B*py + C*pz + D) / norm;
+        
+        const resDiv = document.getElementById('result');
+        resDiv.style.display = 'block';
+        resDiv.innerHTML = `垂直距离：<b>${dist.toFixed(4)}</b>`;
 
-        if (norm === 0) {
-            alert('错误：三点共线无法形成平面！');
-            return;
-        }
-
-        const D = -(A * ax + B * ay + C * az);
-        const signedDist = (A * px + B * py + C * pz + D) / norm;
-        const dist = Math.abs(signedDist);
-        const side = signedDist > 0 ? "正法向侧" : (signedDist < 0 ? "负法向侧" : "平面上");
-
-        const resultDiv = document.getElementById('result');
-        resultDiv.style.display = 'block';
-        resultDiv.innerHTML = `结果 - ${groupId}<br>垂直距离: ${dist.toFixed(4)}<br>方位: ${side}`;
-
-        history.unshift({
-            time: new Date().toLocaleTimeString(),
-            id: groupId,
-            p: `(${px}, ${py}, ${pz})`,
-            dist: dist.toFixed(4),
-            side: side
-        });
-        showHistory();
+        const item = {
+            id: document.getElementById('groupSelect').value || '自定义',
+            p: `${px},${py},${pz}`,
+            d: dist.toFixed(4),
+            t: new Date().toLocaleTimeString()
+        };
+        history.unshift(item);
+        localStorage.setItem('my_geo_history', JSON.stringify(history));
+        renderHistory();
     }
 
-    function showHistory() {
-        const list = document.getElementById('history-list');
-        list.innerHTML = history.map(h => `<li>[${h.time}] 组:${h.id} | P:${h.p} | 距:<b>${h.dist}</b> (${h.side})</li>`).join('');
+    function renderHistory() {
+        const list = document.getElementById('historyList');
+        list.innerHTML = history.slice(0,10).map(h => `
+            <div class="history-item">[${h.t}] ${h.id} -> 距: <b>${h.d}</b></div>
+        `).join('');
     }
 
-    function exportHistory() {
-        if (history.length === 0) return alert('无记录');
-        let csv = "时间,组编号,查询点,垂距,方位\n";
-        history.forEach(h => csv += `${h.time},${h.id},"${h.p}",${h.dist},${h.side}\n`);
-        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `距离计算记录_${new Date().getTime()}.csv`;
-        link.click();
+    function clearHistory() {
+        if(confirm('清空历史？')){ history=[]; localStorage.removeItem('my_geo_history'); renderHistory(); }
+    }
+
+    function exportCSV() {
+        let csv = "\ufeff时间,组ID,P点坐标,垂距\n";
+        history.forEach(h => csv += `${h.t},${h.id},"${h.p}",${h.d}\n`);
+        const blob = new Blob([csv], {type:'text/csv'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = '计算记录.csv';
+        a.click();
     }
 </script>
 </body>
