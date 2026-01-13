@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三维空间垂距计算器 PWA</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#007bff">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; line-height: 1.5; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { color: #007bff; font-size: 24px; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+        h2 { font-size: 18px; margin-top: 25px; }
+        .card { background: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 20px; border: 1px solid #dee2e6; }
+        .point-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
+        label { display: block; width: 100%; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
+        input, select, textarea { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; width: 100%; box-sizing: border-box; }
+        input[type="number"] { flex: 1; min-width: 80px; }
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        button { padding: 12px 20px; font-size: 16px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.3s; flex: 1; min-width: 120px; }
+        button:hover { background-color: #0056b3; }
+        button.secondary { background-color: #6c757d; }
+        #result { margin-top: 20px; padding: 15px; border-radius: 8px; background: #e7f3ff; font-weight: bold; border-left: 5px solid #007bff; }
+        #history-list { list-style: none; padding: 0; }
+        #history-list li { margin-bottom: 10px; padding: 10px; background: #fff; border: 1px solid #eee; border-radius: 5px; font-size: 14px; }
+        .status { font-size: 12px; color: #666; margin-top: 5px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>三维空间垂距计算器</h1>
+
+    <div class="card">
+        <h2>步骤1: 数据管理</h2>
+        <p style="font-size: 12px;">默认已加载内置线路数据。您也可以粘贴新数据覆盖或上传CSV。</p>
+        <textarea id="dataInput" placeholder="编号,X1,Y1,Z1,X2,Y2,Z2,X3,Y3,Z3"></textarea>
+        <div class="status" id="importStatus">准备就绪</div>
+        <div class="btn-group" style="margin-top:10px;">
+            <input type="file" id="fileInput" accept=".csv" style="display:none">
+            <button type="button" class="secondary" onclick="document.getElementById('fileInput').click()">上传文件</button>
+            <button type="button" onclick="loadGroups()">解析并导入</button>
+        </div>
+    </div>
+
+    <form id="planeForm">
+        <div class="card">
+            <h2>步骤2: 选择组并输入点</h2>
+            <label>选择组编号：</label>
+            <select id="groupSelect" onchange="fillPoints()">
+                <option value="">--请选择内置或导入的数据--</option>
+            </select>
+            
+            <div id="planePointsDisplay" style="margin-top:15px; font-size: 13px; color: #555;">
+                <div class="point-group">
+                    <label>平面点 A / B / C (自动):</label>
+                    <input type="number" id="ax" readonly placeholder="Ax"> <input type="number" id="ay" readonly placeholder="Ay"> <input type="number" id="az" readonly placeholder="Az">
+                </div>
+                <div class="point-group">
+                    <input type="number" id="bx" readonly placeholder="Bx"> <input type="number" id="by" readonly placeholder="By"> <input type="number" id="bz" readonly placeholder="Bz">
+                </div>
+                <div class="point-group">
+                    <input type="number" id="cx" readonly placeholder="Cx"> <input type="number" id="cy" readonly placeholder="Cy"> <input type="number" id="cz" readonly placeholder="Cz">
+                </div>
+            </div>
+
+            <div class="point-group" style="margin-top:10px; background: #fff; padding: 10px; border-radius: 5px; border: 1px solid #ddd;">
+                <label>待查点 P (请输入坐标):</label>
+                <input type="number" id="px" step="any" placeholder="Px" required> 
+                <input type="number" id="py" step="any" placeholder="Py" required> 
+                <input type="number" id="pz" step="any" placeholder="Pz" required>
+            </div>
+            <button type="button" onclick="calculateDistance()" style="width: 100%; margin-top: 15px;">立即计算垂距</button>
+        </div>
+    </form>
+
+    <div id="result" style="display:none;"></div>
+
+    <div class="card">
+        <h2>历史记录</h2>
+        <div class="btn-group">
+            <button type="button" class="secondary" onclick="showHistory()">查看/刷新记录</button>
+            <button type="button" class="secondary" onclick="exportHistory()">导出 CSV</button>
+        </div>
+        <ul id="history-list"></ul>
+    </div>
+</div>
+
+<script>
+    // 内置数据
+    const builtInData = `线左A2,3328539.6601,488991.3529,-1.2231,3328554.2504,489015.6863,20.1565,3328555.9570,489018.5330,22.3814
+线左A4,3328539.7012,488991.4215,-3.1663,3328554.7415,489016.5052,18.8732,3328556.3746,489019.2295,21.1346
+线左A6,3328539.7012,488991.4215,-5.1697,3328555.2354,489017.3291,17.5933,3328556.8366,489020.0001,19.9411
+线左A8,3328539.7012,488991.4215,-7.1731,3328555.7317,489018.1568,16.3171,3328557.2993,489020.7716,18.7482
+线左A10,3328539.6601,488991.3530,-9.2367,3328556.2311,489018.9897,15.0458,3328557.8007,489021.6079,17.6234
+线左B1,3328536.9282,488993.1486,-0.1195,3328552.6977,489016.0685,20.8038,3328554.5387,489018.7572,22.9337
+线左B3,3328536.9247,488993.2496,-2.0590,3328553.1844,489016.8821,19.5146,3328554.9533,489019.4543,21.6774
+线左B5,3328536.8736,488993.2814,-4.0616,3328553.6767,489017.7040,18.2335,3328555.4171,489020.2281,20.4774
+线左B7,3328536.8225,488993.3132,-6.0643,3328554.1713,489018.5292,16.9548,3328555.8815,489021.0027,19.2787
+线左B9,3328536.7713,488993.3450,-8.0670,3328554.6693,489019.3592,15.6811,3328556.3471,489021.7790,18.0804
+线左B11,3328536.7202,488993.3769,-10.0696,3328555.1710,489020.1935,14.4111,3328556.8136,489022.5567,16.8836
+线左C2,3328534.1090,488994.9023,-1.0803,3328551.6378,489017.2713,20.1687,3328553.6319,489019.8278,22.3329
+线左C4,3328534.0587,488995.0321,-3.0193,3328552.1260,489018.0883,18.8823,3328554.0416,489020.5284,21.0784
+线左C6,3328533.9566,488995.0958,-5.0211,3328552.6189,489018.9111,17.6021,3328554.5057,489021.3026,19.8790
+线左C8,3328533.8545,488995.1594,-7.0230,3328553.1161,489019.7398,16.3267,3328554.9707,489022.0780,18.6806
+线左C10,3328533.7523,488995.2230,-9.0249,3328553.6157,489020.5713,15.0541,3328555.4368,489022.8549,17.4830
+线左D3,3328531.2432,488996.6828,-2.0418,3328550.5860,489018.4812,19.5415,3328552.7233,489020.8986,21.7366
+线左D5,3328531.1462,488996.8413,-3.9803,3328551.0749,489019.3007,18.2571,3328553.1306,489021.6040,20.4804
+线左D7,3328530.9932,488996.9366,-5.9815,3328551.5699,489020.1260,16.9788,3328553.5948,489022.3784,19.2818
+线左D9,3328530.8402,488997.0320,-7.9825,3328552.0689,489020.9557,15.7050,3328554.0605,489023.1546,18.0839
+线左B'1,3328542.4790,488989.6889,-0.2045,3328555.3184,489014.4964,20.8032,3328556.8227,489017.3902,22.9299
+线左B'3,3328542.5688,488989.7316,-2.1455,3328555.8065,489015.3096,19.5144,3328557.2426,489018.0817,21.6776
+线左B'5,3328542.6200,488989.6997,-4.1497,3328556.2996,489016.1310,18.2329,3328557.7064,489018.8553,20.4773
+线左B'7,3328542.6713,488989.6677,-6.1539,3328556.7947,489016.9564,16.9554,3328558.1710,489019.6301,19.2788
+线左B'9,3328542.7225,488989.6359,-8.1580,3328557.2924,489017.7866,15.6812,3328558.6364,489020.4064,18.0804
+线左B'11,3328542.7738,488989.6039,-10.1622,3328557.7917,489018.6216,14.4110,3328559.1025,489021.1841,16.8834
+线左C'2,3328545.3135,488987.9190,-1.2517,3328556.8788,489014.1292,20.1688,3328558.1944,489017.0920,22.3330
+线左C′4,3328545.4500,488987.9321,-3.1937,3328557.3690,489014.9445,18.8826,3328558.6194,489017.7836,21.0784
+线左C'6,3328545.5526,488987.8681,-5.1987,3328557.8631,489015.7667,17.6022,3328559.0836,489018.5577,19.8790
+线左C'8,3328545.6552,488987.8043,-7.2036,3328558.3596,489016.5961,16.3267,3328559.5485,489019.3332,18.6806
+线左C10,3328545.7577,488987.7403,-9.2086,3328558.8575,489017.4288,15.0547,3328560.0143,489020.1104,17.4831
+线左D'3,3328548.2051,488986.1113,-2.3011,3328558.4416,489013.7704,19.5408,3328559.5669,489016.7951,21.7364
+线左D'5,3328548.3885,488986.0944,-4.2444,3328558.9342,489014.5891,18.2573,3328559.9973,489017.4866,20.4803
+线左D'7,3328548.5425,488985.9985,-6.2501,3328559.4291,489015.4138,16.9792,3328560.4618,489018.2610,19.2818
+线左D'9,3328548.6964,488985.9026,-8.2559,3328559.9256,489016.2446,15.7050,3328560.9271,489019.0375,18.0838
+线右A2,3328513.2981,489007.7743,-1.2231,3328528.7059,489031.5984,20.1565,3328530.5086,489034.3852,22.3814
+线右A4,3328513.3415,489007.8414,-3.1663,3328529.2244,489032.4003,18.8732,3328530.9496,489035.0672,21.1346
+线右A6,3328513.3415,489007.8414,-5.1697,3328529.7461,489033.2068,17.5933,3328531.4375,489035.8216,19.9411
+线右A8,3328513.3415,489007.8414,-7.1731,3328530.2702,489034.0172,16.3171,3328531.9261,489036.5770,18.7482
+线右A10,3328513.2981,489007.7743,-9.2367,3328530.7976,489034.8326,15.0458,3328532.4556,489037.3958,17.6234
+线右B1,3328516.1142,489006.1140,-0.1195,3328529.7335,489030.3733,20.8038,3328531.3351,489033.2112,22.9337
+线右B3,3328516.2064,489006.1554,-2.0590,3328530.2492,489031.1688,19.5146,3328531.7780,489033.8906,21.6774
+线右B5,3328516.2575,489006.1235,-4.0616,3328530.7698,489031.9731,18.2335,3328532.2680,489034.6481,20.4774
+线右B7,3328516.3086,489006.0916,-6.0643,3328531.2924,489032.7809,16.9548,3328532.7585,489035.4064,19.2787
+线右B9,3328516.3597,489006.0598,-8.0670,3328531.8179,489033.5937,15.6811,3328533.2501,489036.1666,18.0804
+线右B11,3328516.4109,489006.0279,-10.0696,3328532.3455,489034.4119,14.4111,3328533.7424,489036.9282,16.8836
+线右C2,3328518.9312,489004.3568,-1.0803,3328531.2804,489029.9522,20.1687,3328532.6958,489032.8692,22.3329
+线右C4,3328519.0700,489004.3689,-3.0193,3328531.7985,489030.7506,18.8823,3328533.1440,489033.5459,21.0784
+线右C6,3328519.1721,489004.3053,-5.0211,3328532.3197,489031.5558,17.6021,3328533.6343,489034.3038,19.8790
+线右C8,3328519.2743,489004.2417,-7.0230,3328532.8442,489032.3675,16.3267,3328534.1252,489035.0630,18.6806
+线右C10,3328519.3764,489004.1780,-9.0249,3328533.3703,489033.1825,15.0541,3328534.6171,489035.8239,17.4830
+线右D3,3328521.7929,489002.5696,-2.0418,3328532.8301,489029.5416,19.5415,3328534.0575,489032.5258,21.7366
+线右D5,3328521.9780,489002.5524,-3.9803,3328533.3501,489030.3418,18.2571,3328534.5111,489033.2024,20.4804
+线右D7,3328522.1309,489002.4571,-5.9815,3328533.8726,489031.1499,16.9788,3328535.0015,489033.9605,19.2818
+线右D9,3328522.2840,489002.3618,-7.9825,3328534.3973,489031.9636,15.7050,3328535.4929,489034.7207,18.0839
+线右B'1,3328510.5617,489009.5708,-0.2045,3328527.1670,489032.0324,20.8032,3328529.1012,489034.6585,22.9299
+线右B'3,3328510.5604,489009.6702,-2.1455,3328527.6817,489032.8290,19.5144,3328529.5367,489035.3402,21.6776
+线右B'5,3328510.5092,489009.7021,-4.1497,3328528.2016,489033.6337,18.2329,3328530.0265,489036.0976,20.4773
+线右B'7,3328510.4579,489009.7340,-6.1539,3328528.7241,489034.4421,16.9554,3328530.5171,489036.8562,19.2788
+线右B'9,3328510.4067,489009.7660,-8.1580,3328529.2498,489035.2548,15.6812,3328531.0087,489037.6162,18.0804
+线右B'11,3328510.3554,489009.7979,-10.1622,3328529.7792,489036.0711,14.4110,3328531.5013,489038.3774,16.8834
+线右C'2,3328507.7233,489011.3345,-1.2517,3328526.1495,489033.2710,20.1688,3328528.2287,489035.7582,22.3330
+线右C′4,3328507.6749,489011.4628,-3.1937,3328526.6651,489034.0705,18.8826,3328528.6621,489036.4445,21.0784
+线右C'6,3328507.5722,489011.5268,-5.1987,3328527.1852,489034.8765,17.6022,3328529.1522,489037.2025,19.8790
+线右C'8,3328507.4697,489011.5907,-7.2036,3328527.7107,489035.6878,16.3267,3328529.6433,489037.9617,18.6806
+线右C10,3328507.3672,489011.6545,-9.2086,3328528.2386,489036.5018,15.0547,3328530.1355,489038.7224,17.4831
+线右D'3,3328504.8259,489013.1330,-2.3011,3328525.1384,489034.5156,19.5408,3328527.3571,489036.8591,21.7364
+线右D'5,3328504.7299,489013.2901,-4.2444,3328525.6560,489035.3186,18.2573,3328527.7880,489037.5503,20.4803
+线右D'7,3328504.5760,489013.3860,-6.2501,3328526.1781,489036.1265,16.9792,3328528.2783,489038.3087,19.2818
+线右D'9,3328504.4220,489013.4819,-8.2559,3328526.7048,489036.9384,15.7050,3328528.7701,489039.0687,18.0838`;
+
+    let groups = new Map();
+    let history = [];
+
+    // 初始化：加载内置数据并注册 Service Worker
+    window.onload = () => {
+        parseData(builtInData);
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(err => console.log("SW注册失败", err));
+        }
+    };
+
+    function loadGroups() {
+        const textarea = document.getElementById('dataInput');
+        const fileInput = document.getElementById('fileInput');
+        
+        if (textarea.value.trim()) {
+            parseData(textarea.value);
+            textarea.value = '';
+        } else if (fileInput.files.length > 0) {
+            const reader = new FileReader();
+            reader.onload = (e) => parseData(e.target.result);
+            reader.readAsText(fileInput.files[0]);
+        } else {
+            alert('请在框内输入数据或选择文件！');
+        }
+    }
+
+    function parseData(text) {
+        const lines = text.trim().split('\n');
+        let count = 0;
+        const select = document.getElementById('groupSelect');
+        
+        lines.forEach(line => {
+            const parts = line.split(',').map(p => p.trim());
+            if (parts.length === 10) {
+                const id = parts[0];
+                const coords = parts.slice(1).map(Number);
+                if (!isNaN(coords[0])) {
+                    groups.set(id, coords);
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.text = id;
+                    select.appendChild(option);
+                    count++;
+                }
+            }
+        });
+        document.getElementById('importStatus').innerText = `成功导入/更新：${count} 组数据。`;
+    }
+
+    function fillPoints() {
+        const id = document.getElementById('groupSelect').value;
+        if (!id) return;
+        const c = groups.get(id);
+        const fields = ['ax','ay','az','bx','by','bz','cx','cy','cz'];
+        fields.forEach((id, idx) => document.getElementById(id).value = c[idx]);
+    }
+
+    function calculateDistance() {
+        const getVal = id => parseFloat(document.getElementById(id).value);
+        const ax = getVal('ax'), ay = getVal('ay'), az = getVal('az');
+        const bx = getVal('bx'), by = getVal('by'), bz = getVal('bz');
+        const cx = getVal('cx'), cy = getVal('cy'), cz = getVal('cz');
+        const px = getVal('px'), py = getVal('py'), pz = getVal('pz');
+        const groupId = document.getElementById('groupSelect').value;
+
+        if (isNaN(ax) || isNaN(px)) {
+            alert('请选择数据组并输入查询点坐标！');
+            return;
+        }
+
+        const abx = bx - ax, aby = by - ay, abz = bz - az;
+        const acx = cx - ax, acy = cy - ay, acz = cz - az;
+        const A = aby * acz - abz * acy;
+        const B = abz * acx - abx * acz;
+        const C = abx * acy - aby * acx;
+        const norm = Math.sqrt(A*A + B*B + C*C);
+
+        if (norm === 0) {
+            alert('错误：三点共线无法形成平面！');
+            return;
+        }
+
+        const D = -(A * ax + B * ay + C * az);
+        const signedDist = (A * px + B * py + C * pz + D) / norm;
+        const dist = Math.abs(signedDist);
+        const side = signedDist > 0 ? "正法向侧" : (signedDist < 0 ? "负法向侧" : "平面上");
+
+        const resultDiv = document.getElementById('result');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `结果 - ${groupId}<br>垂直距离: ${dist.toFixed(4)}<br>方位: ${side}`;
+
+        history.unshift({
+            time: new Date().toLocaleTimeString(),
+            id: groupId,
+            p: `(${px}, ${py}, ${pz})`,
+            dist: dist.toFixed(4),
+            side: side
+        });
+        showHistory();
+    }
+
+    function showHistory() {
+        const list = document.getElementById('history-list');
+        list.innerHTML = history.map(h => `<li>[${h.time}] 组:${h.id} | P:${h.p} | 距:<b>${h.dist}</b> (${h.side})</li>`).join('');
+    }
+
+    function exportHistory() {
+        if (history.length === 0) return alert('无记录');
+        let csv = "时间,组编号,查询点,垂距,方位\n";
+        history.forEach(h => csv += `${h.time},${h.id},"${h.p}",${h.dist},${h.side}\n`);
+        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `距离计算记录_${new Date().getTime()}.csv`;
+        link.click();
+    }
+</script>
+</body>
+</html>
